@@ -24,7 +24,15 @@ def feature_normalization(train, test):
         test_normalized  - test set after normalization
 
     """
-    # TODO
+    train_min = np.minimum.reduce(train, axis=0)
+    train_max = np.maximum.reduce(train, axis=0)
+    breadth = train_max - train_min
+    train_normalized = (train - train_min) / breadth
+    test_normalized = (test - train_min) / breadth
+    # TODO discard constant-valued features (though none exist in the training
+    # set)
+
+    return train_normalized, test_normalized
 
 
 ########################################
