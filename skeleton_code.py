@@ -50,8 +50,8 @@ def compute_square_loss(X, y, theta):
     Returns:
         loss - the square loss, scalar
     """
-    loss = 0 #initialize the square_loss
-    #TODO
+
+    return ((X @ theta - y)**2).sum() / len(y)
 
 
 
