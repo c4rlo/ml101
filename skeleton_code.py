@@ -1,5 +1,5 @@
+#!/usr/bin/python3
 import pandas as pd
-import logging
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
@@ -184,6 +184,8 @@ def batch_grad_descent(X, y, alpha=0.1, num_iter=1000, check_gradient=False):
 #TODO
 
 
+def compute_regularized_square_loss(X, y, theta, lambda_reg):
+    return ((X@theta - y)**2).sum() / len(y) + lambda_reg*(theta**2).sum()
 
 ###################################################
 ### Compute the gradient of Regularized Batch Gradient Descent
@@ -238,7 +240,7 @@ def regularized_grad_descent(X, y, alpha=0.1, lambda_reg=1, num_iter=1000):
 
 #############################################
 ### Stochastic Gradient Descent
-def stochastic_grad_descent(X, y, alpha=0.1, lambda_reg=1, num_iter=1000):
+def stochastic_grad_descent(X, y, alpha=0.1, lambda_reg=1, eta0=None, t0=1, num_iter=1000):
     """
     In this question you will implement stochastic gradient descent with a regularization term
 
@@ -260,10 +262,34 @@ def stochastic_grad_descent(X, y, alpha=0.1, lambda_reg=1, num_iter=1000):
     num_instances, num_features = X.shape[0], X.shape[1]
     theta = np.ones(num_features) #Initialize theta
 
-
     theta_hist = np.zeros((num_iter, num_instances, num_features))  #Initialize theta_hist
     loss_hist = np.zeros((num_iter, num_instances)) #Initialize loss_hist
-    #TODO
+
+    t = t0
+    for epoch in range(num_iter):
+        for i in range(num_instances):
+            grad = compute_sgd_gradient(X[i], y[i], theta, lambda_reg)
+            if alpha == "1/t":
+                a = 1/t
+            elif alpha == "1/sqrt(t)":
+                a = 1/np.sqrt(t)
+            elif alpha == "special":
+                a = eta0 / (1 + eta0*lambda_reg*t)
+            else:
+                a = alpha
+            theta -= a * grad
+            theta_hist[epoch, i] = theta
+            loss_hist[epoch, i] = compute_regularized_square_loss(X, y, theta,
+                    lambda_reg)
+            t += 1
+
+    return theta_hist, loss_hist
+
+def compute_sgd_gradient(xi, yi, theta, lambda_reg):
+    return 2*( (theta.T @ xi - yi)*xi + lambda_reg*theta )
+
+def compute_sgd_loss(xi, yi, theta, lambda_reg):
+    return ((theta.T @ xi - yi)**2).sum() + lambda_reg*(theta**2).sum()
 
 ################################################
 ### Visualization that compares the convergence speed of batch
@@ -272,6 +298,12 @@ def stochastic_grad_descent(X, y, alpha=0.1, lambda_reg=1, num_iter=1000):
 ##Y-axis: log(objective_function_value) and/or objective_function_value
 
 def main():
+    try:
+        mode = sys.argv[1]
+    except IndexError:
+        print("usage: {} MODE".format(sys.argv[0]))
+        sys.exit(2)
+
     #Loading the dataset
     print('loading the dataset')
 
@@ -289,21 +321,21 @@ def main():
     X_full = np.vstack((X_train, X_test))
     y_full = y
 
-    find_lambda = False
+    print("Doing some machine learning (mode={})!".format(mode))
 
-    if find_lambda:
-        def search_range(start, stop, num):
-            step = (stop - start) / num
-            a = start
-            for _ in range(num):
-                yield a
-                a += step
+    def search_range(start, stop, num):
+        step = (stop - start) / num
+        a = start
+        for _ in range(num):
+            yield a
+            a += step
+
+    if mode == 'reg_gd_lambda':
 
         lambdas = []
         train_losses = []
         test_losses = []
 
-        print("Doing some machine learning!")
         for lambda_reg in search_range(0, .1, 50):
             theta_hist, loss_hist = regularized_grad_descent(X_train, y_train,
                     alpha=0.05, lambda_reg=lambda_reg)
@@ -322,12 +354,56 @@ def main():
         plt.legend(["training loss", "test loss"])
         plt.savefig('fig1.svg')
 
-    else: # not find_lambda
+    elif mode == 'reg_gd':
 
-        theta_hist, _ = regularized_grad_descent(X_full, y_full, alpha=0.05,
-                lambda_reg=0.023848)
+        theta_hist, loss_hist = regularized_grad_descent(X_train, y_train,
+                alpha=0.05, lambda_reg=0.023848)
+        theta = theta_hist[-1]
+        test_loss = compute_square_loss(X_test, y_test, theta)
+        print("θ =", theta)
+        print("test loss =", test_loss)
+
+    elif mode == 'reg_gd_full':
+
+        theta_hist, loss_hist = regularized_grad_descent(X_full, y_full,
+                alpha=0.05, lambda_reg=0.023848)
         theta = theta_hist[-1]
         print("θ =", theta)
+        print("loss =", loss_hist[-1])
+
+    elif mode == 'reg_sgd':
+
+        for i, a in enumerate((0.0005, 0.001, 0.002, 0.003, "1/t", "1/sqrt(t)")):
+            theta_hist, loss_hist = stochastic_grad_descent(X_train, y_train,
+                    alpha=a, lambda_reg=0.023848, t0=300)
+            losses = loss_hist[:, -1]
+            plt.clf()
+            plt.semilogy(losses, 'r--')
+            plt.title("η={}, final loss is {}".format(a, losses[-1]))
+            plt.xlabel("Epoch")
+            plt.ylabel("Objective function (regularized square loss)")
+            plt.savefig("fig2-{}.svg".format(i))
+            theta = theta_hist[-1, -1]
+            objective = losses[-1]
+            test_loss = compute_square_loss(X_test, y_test, theta)
+            print("For η={}, objective is {}, test loss is {}".format(a,
+                objective, test_loss))
+
+    elif mode == 'reg_sgd_adaptive':
+
+        # for eta0 in 0.01, 0.02, 0.03, 0.035, 0.04, 0.045, 0.05:
+        for eta0 in 0.035, 0.045:
+            theta_hist, loss_hist = stochastic_grad_descent(X_train, y_train,
+                    alpha="special", eta0=eta0, lambda_reg=0.023848)
+            objective = loss_hist[-1, -1]
+            theta = theta_hist[-1, -1]
+            test_loss = compute_square_loss(X_test, y_test, theta)
+            print("For eta0={}, objective is {}, test loss is {}".format(eta0,
+                objective, test_loss))
+
+    else:
+        print("Unknown mode")
+        sys.exit(2)
 
 
 main()
