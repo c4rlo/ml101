@@ -185,10 +185,6 @@ def batch_grad_descent(X, y, alpha=0.1, num_iter=1000, check_gradient=False):
 
 
 
-def compute_regularized_square_loss(X, y, theta, lambda_reg):
-    return compute_square_loss(X, y, theta) + lambda_reg * (theta**2).sum()
-
-
 ###################################################
 ### Compute the gradient of Regularized Batch Gradient Descent
 def compute_regularized_square_loss_gradient(X, y, theta, lambda_reg):
@@ -231,7 +227,7 @@ def regularized_grad_descent(X, y, alpha=0.1, lambda_reg=1, num_iter=1000):
         grad = compute_regularized_square_loss_gradient(X, y, theta, lambda_reg)
         theta -= alpha * grad
         theta_hist[i] = theta
-        loss_hist[i] = compute_regularized_square_loss(X, y, theta)
+        loss_hist[i] = compute_square_loss(X, y, theta)
 
     return theta_hist, loss_hist
 
@@ -290,13 +286,48 @@ def main():
     X_train, X_test = feature_normalization(X_train, X_test)
     X_train = np.hstack((X_train, np.ones((X_train.shape[0], 1))))  # Add bias term
     X_test = np.hstack((X_test, np.ones((X_test.shape[0], 1)))) # Add bias term
+    X_full = np.vstack((X_train, X_test))
+    y_full = y
 
-    theta_hist, loss_hist = batch_grad_descent(X_train, y_train, alpha=0.0504,
-            check_gradient=False)
-    print(loss_hist)
+    find_lambda = False
+
+    if find_lambda:
+        def search_range(start, stop, num):
+            step = (stop - start) / num
+            a = start
+            for _ in range(num):
+                yield a
+                a += step
+
+        lambdas = []
+        train_losses = []
+        test_losses = []
+
+        print("Doing some machine learning!")
+        for lambda_reg in search_range(0, .1, 50):
+            theta_hist, loss_hist = regularized_grad_descent(X_train, y_train,
+                    alpha=0.05, lambda_reg=lambda_reg)
+            theta = theta_hist[-1]
+            train_loss = loss_hist[-1]
+            test_loss = compute_square_loss(X_test, y_test, theta)
+            print("For λ={}: loss = {} (train) / {} (test)".format(lambda_reg,
+                train_loss, test_loss))
+            lambdas.append(lambda_reg)
+            train_losses.append(train_loss)
+            test_losses.append(test_loss)
+
+        plt.plot(lambdas, train_losses, 'r--', lambdas, test_losses, 'b--')
+        plt.xlabel("λ")
+        plt.ylabel("Square loss (non-regularized)")
+        plt.legend(["training loss", "test loss"])
+        plt.savefig('fig1.svg')
+
+    else: # not find_lambda
+
+        theta_hist, _ = regularized_grad_descent(X_full, y_full, alpha=0.05,
+                lambda_reg=0.023848)
+        theta = theta_hist[-1]
+        print("θ =", theta)
 
 
-    # TODO
-
-if __name__ == "__main__":
-    main()
+main()
